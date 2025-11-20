@@ -1,0 +1,16 @@
+# ============================================
+# SnowCLI Configuration for Streamlit App
+# Insurance Customer Management System
+# ============================================
+
+definition_version: 2
+
+entities:
+  insurance_customer_management:
+    type: streamlit
+    identifier: insurance_customer_management
+    stage: streamlit
+    query_warehouse: compute_wh
+    main_file: streamlit_app.py
+    title: "Insurance Customer Management"
+
