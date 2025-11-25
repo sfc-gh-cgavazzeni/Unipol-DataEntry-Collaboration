@@ -1,0 +1,35 @@
+# Snowflake Native App Manifest
+# Unipol Customer Management System
+
+manifest_version: 1
+
+version:
+  name: V1_0
+  label: "Unipol Customer Management v1.0"
+  comment: "Insurance Customer Management System with audit trails and notes"
+
+artifacts:
+  readme: README.md
+  setup_script: setup_script.sql
+  default_streamlit: streamlit/streamlit_app.py
+
+configuration:
+  log_level: INFO
+  trace_level: OFF
+
+# Required privileges for the application
+privileges:
+  - SELECT:
+      description: "Read access to customer data, audit logs, and notes"
+  - INSERT:
+      description: "Create audit log entries and table notes"
+  - UPDATE:
+      description: "Update customer information"
+
+# Application metadata
+metadata:
+  name: "Unipol Customer Management"
+  version: "1.0.0"
+  comment: "Professional insurance customer management with Unipol branding"
+
+

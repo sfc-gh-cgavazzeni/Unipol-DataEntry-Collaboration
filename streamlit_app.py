@@ -1,5 +1,5 @@
 """
-Unipol - Insurance Customer Management System
+ - Insurance Customer Management System
 Streamlit Application for Snowflake
 """
 
@@ -21,15 +21,15 @@ except:
     SNOWFLAKE_MODE = False
     st.stop()
 
-# Page configuration with Unipol branding
+# Page configuration with branding
 st.set_page_config(
-    page_title="Unipol - Customer Management",
+    page_title="Insurance - Customer Management",
     page_icon="🔷",  # Using a blue diamond as placeholder
     layout="wide",
     initial_sidebar_state="expanded"
 )
 
-# Unipol Brand Colors and Custom CSS
+#  Brand Colors and Custom CSS
 st.markdown("""
 <style>
     /* Unipol Brand Colors */
@@ -329,34 +329,80 @@ def load_stream_changes():
     except Exception as e:
         return pd.DataFrame()
 
+def save_table_note(table_name, note_text, user):
+    """Save a note for a table"""
+    try:
+        # Escape values
+        escaped_table = table_name.replace("'", "''")
+        escaped_note = note_text.replace("'", "''")
+        escaped_user = user.replace("'", "''")
+        
+        # Insert note
+        note_query = f"""
+        INSERT INTO TABLE_NOTES (TABLE_NAME, NOTE_TEXT, CREATED_BY)
+        VALUES ('{escaped_table}', '{escaped_note}', '{escaped_user}')
+        """
+        session.sql(note_query).collect()
+        return True, "Nota salvata con successo"
+    except Exception as e:
+        return False, f"Errore nel salvare la nota: {str(e)}"
+
+def get_latest_note(table_name):
+    """Get the latest note for a table"""
+    try:
+        query = f"""
+        SELECT 
+            NOTE_ID,
+            NOTE_TEXT,
+            CREATED_BY,
+            CREATED_AT
+        FROM TABLE_NOTES
+        WHERE TABLE_NAME = '{table_name}'
+        ORDER BY CREATED_AT DESC
+        LIMIT 1
+        """
+        df = session.sql(query).to_pandas()
+        return df.iloc[0].to_dict() if not df.empty else None
+    except:
+        return None
+
 # ============================================
 # MAIN APPLICATION
 # ============================================
 
-# Unipol Header with brand colors
+# Main Header with brand colors
 st.markdown('<div class="main-header"></div>', unsafe_allow_html=True)
 
-# Create columns for logo and title
-col_logo, col_title = st.columns([1, 5])
+# Title and subtitle
+st.markdown('<h1 class="unipol-title">Customer Management System</h1>', unsafe_allow_html=True)
+st.markdown('<p class="unipol-subtitle">Gestione Clienti Assicurativi</p>', unsafe_allow_html=True)
 
-with col_logo:
-    # Using text representation of Unipol logo
-    st.markdown("""
-    <div style="font-family: Arial, sans-serif; font-weight: bold; font-size: 2rem; color: #003d7a; line-height: 1.2;">
-        Unipol
-    </div>
-    <div style="height: 3px; background: linear-gradient(to right, #e30613 33%, #00a650 33%, #00a650 66%, #003d7a 66%); margin-top: 5px;"></div>
-    """, unsafe_allow_html=True)
-
-with col_title:
-    st.markdown('<h1 class="unipol-title">Customer Management System</h1>', unsafe_allow_html=True)
-    st.markdown('<p class="unipol-subtitle">Gestione Clienti Assicurativi</p>', unsafe_allow_html=True)
+# Brand color stripe
+st.markdown("""
+<div style="height: 3px; background: linear-gradient(to right, #e30613 33%, #00a650 33%, #00a650 66%, #003d7a 66%); margin-top: 10px; margin-bottom: 10px;"></div>
+""", unsafe_allow_html=True)
 
 st.markdown("<br>", unsafe_allow_html=True)
 
 # Get current user
 current_user = get_current_user()
 st.sidebar.info(f"👤 Utente: **{current_user}**")
+
+# ============================================
+# TABLE SELECTOR
+# ============================================
+
+st.sidebar.markdown('<h3 style="color: #003d7a;">📊 Selezione Tabella</h3>', unsafe_allow_html=True)
+
+# Table selector
+selected_table = st.sidebar.selectbox(
+    "Tabella da visualizzare",
+    ["CUSTOMERS", "CUSTOMER_AUDIT_LOG"],
+    index=0,
+    help="Seleziona quale tabella visualizzare"
+)
+
+st.sidebar.markdown("---")
 
 # ============================================
 # FILTERS SECTION
@@ -389,23 +435,61 @@ if st.sidebar.button("🔄 Refresh Data"):
     st.rerun()
 
 # ============================================
-# CUSTOMER TABLE SECTION
+# MAIN TABLE SECTION
 # ============================================
 
-st.markdown('<h2 style="color: #003d7a; margin-top: 2rem;">📋 Anagrafica Clienti</h2>', unsafe_allow_html=True)
-
-# Load customers
-customers_df = load_customers(filters)
-
-if customers_df.empty:
-    st.warning("No customers found matching the filters.")
-else:
-    st.info(f"Showing **{len(customers_df)}** customer(s)")
+# Display content based on selected table
+if selected_table == "CUSTOMERS":
+    # Header with Notes button
+    header_col1, header_col2 = st.columns([4, 1])
+    with header_col1:
+        st.markdown('<h2 style="color: #003d7a; margin-top: 2rem;">📋 Anagrafica Clienti</h2>', unsafe_allow_html=True)
+    with header_col2:
+        st.markdown("<br>", unsafe_allow_html=True)
+        if st.button("📝 Note", key="notes_button", help="Aggiungi nota alla tabella"):
+            st.session_state.show_note_form = not st.session_state.get('show_note_form', False)
     
-    # Display customers with edit buttons
-    for idx, row in customers_df.iterrows():
-        with st.container():
-            col1, col2 = st.columns([6, 1])
+    # Note form (if button clicked)
+    if st.session_state.get('show_note_form', False):
+        with st.expander("✍️ Inserisci Nota", expanded=True):
+            note_text = st.text_area(
+                "Testo della nota",
+                placeholder="Inserisci qui la nota per la tabella CUSTOMERS...",
+                height=100,
+                key="note_input"
+            )
+            
+            col_save, col_cancel = st.columns([1, 1])
+            with col_save:
+                if st.button("💾 Salva Nota", type="primary", key="save_note"):
+                    if note_text and note_text.strip():
+                        success, message = save_table_note("CUSTOMERS", note_text, current_user)
+                        if success:
+                            st.success(f"✅ {message}")
+                            st.session_state.show_note_form = False
+                            st.rerun()
+                        else:
+                            st.error(f"❌ {message}")
+                    else:
+                        st.warning("⚠️ Inserisci del testo per la nota")
+            
+            with col_cancel:
+                if st.button("❌ Annulla", key="cancel_note"):
+                    st.session_state.show_note_form = False
+                    st.rerun()
+    
+    # Load customers
+    customers_df = load_customers(filters)
+
+    if customers_df.empty:
+        st.warning("No customers found matching the filters.")
+    else:
+        st.info(f"Showing **{len(customers_df)}** customer(s)")
+        
+        # Display customers with edit buttons
+        for idx, row in customers_df.iterrows():
+            with st.container():
+                col1, col2 = st.columns([6, 1])
             
             with col1:
                 # Create an expander for each customer
@@ -516,6 +600,76 @@ else:
                         st.session_state.editing_customer_id = customer_id
                         st.rerun()
 
+elif selected_table == "CUSTOMER_AUDIT_LOG":
+    st.markdown('<h2 style="color: #003d7a; margin-top: 2rem;">📝 Registro Audit Completo</h2>', unsafe_allow_html=True)
+    
+    # Load all audit log records
+    audit_query = """
+    SELECT 
+        a.AUDIT_ID,
+        a.CUSTOMER_ID,
+        c.FIRST_NAME || ' ' || c.LAST_NAME as CUSTOMER_NAME,
+        a.MODIFIED_BY,
+        a.MODIFIED_AT,
+        a.COMMENT,
+        a.CHANGE_TYPE,
+        a.OLD_VALUES,
+        a.NEW_VALUES
+    FROM CUSTOMER_AUDIT_LOG a
+    LEFT JOIN CUSTOMERS c ON a.CUSTOMER_ID = c.CUSTOMER_ID
+    ORDER BY a.AUDIT_ID DESC
+    """
+    
+    try:
+        audit_df = session.sql(audit_query).to_pandas()
+        
+        if audit_df.empty:
+            st.info("📋 Nessuna modifica registrata nel log di audit.")
+        else:
+            st.info(f"Visualizzazione di **{len(audit_df)}** record di audit")
+            
+            # Display audit records in expandable cards
+            for idx, row in audit_df.iterrows():
+                with st.expander(
+                    f"🔍 Audit #{int(row['AUDIT_ID'])} - {str(row['CUSTOMER_NAME'])} - {str(row['CHANGE_TYPE'])} ({str(row['MODIFIED_AT'])})"
+                ):
+                    col1, col2 = st.columns(2)
+                    
+                    with col1:
+                        st.markdown(f"**Audit ID:** {int(row['AUDIT_ID'])}")
+                        st.markdown(f"**Customer ID:** {int(row['CUSTOMER_ID']) if row['CUSTOMER_ID'] else 'N/A'}")
+                        st.markdown(f"**Nome Cliente:** {str(row['CUSTOMER_NAME'])}")
+                        st.markdown(f"**Tipo Modifica:** {str(row['CHANGE_TYPE'])}")
+                    
+                    with col2:
+                        st.markdown(f"**Modificato da:** {str(row['MODIFIED_BY'])}")
+                        st.markdown(f"**Data/Ora:** {str(row['MODIFIED_AT'])}")
+                        st.markdown(f"**Commento:** {str(row['COMMENT'])}")
+                    
+                    # Show JSON data if available
+                    if row['OLD_VALUES'] is not None or row['NEW_VALUES'] is not None:
+                        st.markdown("---")
+                        st.markdown("**📊 Dettagli Modifiche:**")
+                        
+                        json_col1, json_col2 = st.columns(2)
+                        
+                        with json_col1:
+                            st.markdown("**Valori Precedenti:**")
+                            if row['OLD_VALUES'] is not None:
+                                st.json(str(row['OLD_VALUES']))
+                            else:
+                                st.text("N/A")
+                        
+                        with json_col2:
+                            st.markdown("**Nuovi Valori:**")
+                            if row['NEW_VALUES'] is not None:
+                                st.json(str(row['NEW_VALUES']))
+                            else:
+                                st.text("N/A")
+    
+    except Exception as e:
+        st.error(f"Errore nel caricamento del log di audit: {str(e)}")
+
 st.markdown("---")
 
 # ============================================
@@ -575,6 +729,25 @@ with tab2:
             hide_index=True,
             use_container_width=True
         )
+
+# ============================================
+# LATEST NOTE SECTION
+# ============================================
+
+st.markdown("<br><br>", unsafe_allow_html=True)
+st.markdown("---")
+
+# Display latest note if exists
+latest_note = get_latest_note(selected_table)
+if latest_note:
+    st.markdown('<h3 style="color: #003d7a;">📌 Ultima Nota</h3>', unsafe_allow_html=True)
+    
+    note_col1, note_col2 = st.columns([4, 1])
+    with note_col1:
+        st.info(f"💬 {latest_note['NOTE_TEXT']}")
+    with note_col2:
+        st.caption(f"**👤 {latest_note['CREATED_BY']}**")
+        st.caption(f"🕒 {str(latest_note['CREATED_AT'])}")
 
 # Footer with Unipol branding
 st.markdown("<br><br>", unsafe_allow_html=True)
