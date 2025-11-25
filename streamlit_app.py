@@ -330,12 +330,15 @@ def load_stream_changes():
         return pd.DataFrame()
 
 def save_table_note(table_name, note_text, user):
-    """Save a note for a table"""
+    """Save a note for a table and send email notification"""
     try:
         # Escape values
         escaped_table = table_name.replace("'", "''")
         escaped_note = note_text.replace("'", "''")
         escaped_user = user.replace("'", "''")
+        
+        # Get timestamp
+        timestamp = session.sql("SELECT CURRENT_TIMESTAMP()::VARCHAR").collect()[0][0]
         
         # Insert note
         note_query = f"""
@@ -343,9 +346,68 @@ def save_table_note(table_name, note_text, user):
         VALUES ('{escaped_table}', '{escaped_note}', '{escaped_user}')
         """
         session.sql(note_query).collect()
+        
+        # Send email notification
+        try:
+            send_note_email_notification(table_name, user, note_text, timestamp)
+        except Exception as email_error:
+            # Don't fail if email fails, just log it
+            print(f"Email notification failed: {str(email_error)}")
+        
         return True, "Nota salvata con successo"
     except Exception as e:
         return False, f"Errore nel salvare la nota: {str(e)}"
+
+def send_note_email_notification(table_name, username, note_text, timestamp):
+    """Send email notification when a note is saved"""
+    try:
+        # Escape values for SQL
+        escaped_table = table_name.replace("'", "''")
+        escaped_user = username.replace("'", "''")
+        escaped_note = note_text.replace("'", "''")
+        escaped_timestamp = str(timestamp).replace("'", "''")
+        
+        # Email recipient
+        recipient = 'cristian.gavazzeni@snowflake.com'
+        
+        # Email subject
+        subject = f'Unipol - Nuova Nota su Tabella: {table_name}'
+        
+        # Email body
+        body = f"""Nuova nota aggiunta alla tabella {table_name}
+
+Dettagli:
+---------
+Tabella: {table_name}
+Utente: {username}
+Data/Ora: {timestamp}
+
+Contenuto Nota:
+{note_text}
+
+---
+Questa è una notifica automatica dal sistema Unipol Customer Management System.
+        """
+        
+        escaped_body = body.replace("'", "''").replace("\n", " ")
+        
+        # Call Snowflake email procedure
+        email_query = f"""
+        CALL SEND_NOTE_EMAIL(
+            '{escaped_table}',
+            '{escaped_user}',
+            '{escaped_note}',
+            '{escaped_timestamp}'
+        )
+        """
+        
+        result = session.sql(email_query).collect()
+        return True
+        
+    except Exception as e:
+        # Log error but don't fail the note save operation
+        print(f"Failed to send email: {str(e)}")
+        return False
 
 def get_latest_note(table_name):
     """Get the latest note for a table"""
